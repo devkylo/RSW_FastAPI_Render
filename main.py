@@ -1,38 +1,49 @@
 from fastapi import FastAPI, Query, HTTPException
 from typing import Optional
-import os, json, subprocess
-from datetime import datetime
+import os
+import json
 
 app = FastAPI()
-REPO_PATH = os.path.abspath(".")
 
-def pull_specific_file(file_path: str):
-    ...
+# JSON 파일 경로 생성 함수
+def get_json_file_path(date: str, team: str) -> str:
+    today_schedules_root_dir = "team_today_schedules"
+    today_team_folder_path = os.path.join(today_schedules_root_dir, team)
+    month_folder = os.path.join(today_team_folder_path, date[:7])
+    json_file_path = os.path.join(month_folder, f"{date}_schedule.json")
+    return json_file_path
 
-@app.get("/get-schedule")
-def get_schedule(
-    team: Optional[str] = Query(None),
-    date: Optional[str] = Query(None)
-):
-    if not team or not date:
-        raise HTTPException(status_code=400, detail="team과 date를 모두 입력해야 합니다.")
+# JSON 데이터 로드 함수
+def load_json_data(file_path: str):
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as file:
+            return json.load(file)
+    else:
+        return None
 
-    # 날짜 형식 유효성 확인
+# 날짜 형식 검증 함수 (간단한 유효성 체크)
+def validate_date_format(date_str: str) -> bool:
     try:
-        datetime.strptime(date, "%Y-%m-%d")
+        from datetime import datetime
+        datetime.strptime(date_str, "%Y-%m-%d")
+        return True
     except ValueError:
-        raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다. 'YYYY-MM-DD' 형식으로 전달하세요.")
+        return False
 
-    json_file_path = os.path.join("team_today_schedules", team, date[:7], f"{date}_schedule.json")
-    absolute_json_path = os.path.join(REPO_PATH, json_file_path)
-
-    if not os.path.exists(absolute_json_path):
-        pull_specific_file(json_file_path)
-
-    if not os.path.exists(absolute_json_path):
-        return {"date": date, "day_shift": [], "night_shift": [], "vacation_shift": []}
-
-    with open(absolute_json_path, "r", encoding="utf-8") as f:
-        schedule_data = json.load(f)
-
-    return schedule_data
+# API 엔드포인트 정의
+@app.get("/get-schedule")
+async def get_schedule(team: str = Query(...), date: str = Query(...)):
+    # 날짜 형식 검증
+    if not validate_date_format(date):
+        raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다. 'YYYY-MM-DD' 형식이어야 합니다.")
+    
+    # JSON 파일 경로 생성
+    json_file_path = get_json_file_path(date, team)
+    
+    # JSON 데이터 로드
+    schedule_data = load_json_data(json_file_path)
+    
+    if schedule_data:
+        return {"data": schedule_data}
+    else:
+        raise HTTPException(status_code=404, detail=f"{date} ({team})에 해당하는 데이터를 찾을 수 없습니다.")
