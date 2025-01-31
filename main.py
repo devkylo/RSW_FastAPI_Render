@@ -14,7 +14,7 @@ class ScheduleData(BaseModel):
 
 @app.get("/")
 def root():
-    return {"message": "Hello, this is the FastAPI server!"}
+    return {"message": "FastAPI server 활성화!"}
 
 @app.get("/get-schedule", response_model=ScheduleData)
 def get_schedule(team: str, date: str):
