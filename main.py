@@ -1,49 +1,35 @@
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from typing import Optional
-import os
-import json
 
 app = FastAPI()
 
-# JSON 파일 경로 생성 함수
-def get_json_file_path(date: str, team: str) -> str:
-    today_schedules_root_dir = "team_today_schedules"
-    today_team_folder_path = os.path.join(today_schedules_root_dir, team)
-    month_folder = os.path.join(today_team_folder_path, date[:7])
-    json_file_path = os.path.join(month_folder, f"{date}_schedule.json")
-    return json_file_path
+# 서버 측에서 임시로 JSON 데이터를 저장할 변수 (예: 메모리)
+stored_data = {}
 
-# JSON 데이터 로드 함수
-def load_json_data(file_path: str):
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as file:
-            return json.load(file)
-    else:
-        return None
+# pydantic 모델 예시
+class ScheduleData(BaseModel):
+    date: str
+    day_shift: list
+    night_shift: list
+    vacation_shift: list
 
-# 날짜 형식 검증 함수 (간단한 유효성 체크)
-def validate_date_format(date_str: str) -> bool:
-    try:
-        from datetime import datetime
-        datetime.strptime(date_str, "%Y-%m-%d")
-        return True
-    except ValueError:
-        return False
+@app.post("/receive-json")
+async def receive_data(team: str, data: ScheduleData):
+    """
+    JSON 데이터를 받아 서버 측에 임시 저장합니다.
+    실제 운용 시 파일 또는 DB에 저장하고,
+    에러 처리 로직을 추가하는 것을 권장합니다.
+    """
+    # team별로 해당 데이터를 저장 (메모리)
+    stored_data[team] = data.dict()
+    return {"detail": f"데이터가 저장되었습니다: {team} - {data.date}"}
 
-# API 엔드포인트 정의
 @app.get("/get-schedule")
-async def get_schedule(team: str = Query(...), date: str = Query(...)):
-    # 날짜 형식 검증
-    if not validate_date_format(date):
-        raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않습니다. 'YYYY-MM-DD' 형식이어야 합니다.")
-    
-    # JSON 파일 경로 생성
-    json_file_path = get_json_file_path(date, team)
-    
-    # JSON 데이터 로드
-    schedule_data = load_json_data(json_file_path)
-    
-    if schedule_data:
-        return {"data": schedule_data}
-    else:
-        raise HTTPException(status_code=404, detail=f"{date} ({team})에 해당하는 데이터를 찾을 수 없습니다.")
+async def get_schedule(team: str):
+    """
+    저장된 JSON 데이터를 팀 단위로 조회합니다.
+    """
+    if team not in stored_data:
+        raise HTTPException(status_code=404, detail="데이터 없음")
+    return {"data": stored_data[team]}
